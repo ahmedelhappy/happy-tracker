@@ -4,19 +4,23 @@ const mainContent = document.getElementById("main-content");
 let counter = 0;
 let habitsArray = [];
 let trashArray = [];
-let currentMonth = new Date().getMonth(); // 0-based
-let currentYear = new Date().getFullYear();
+let currentDate = new Date();                  // <- added
+let currentMonth = currentDate.getMonth();     // 0-based
+let currentYear = currentDate.getFullYear();
 
 // ====== UTILITIES ======
 function getToday() {
-  return new Date().toISOString().split("T")[0];
+  const now = new Date();
+  now.setMinutes(now.getMinutes() - now.getTimezoneOffset()); 
+  return now.toISOString().split("T")[0];
 }
 
-function getWeekDates() {
-  const today = new Date();
-  const dayOfWeek = today.getDay();
-  const monday = new Date(today);
-  monday.setDate(today.getDate() - ((dayOfWeek + 6) % 7));
+
+// now accepts a reference date (defaults to today)
+function getWeekDates(referenceDate = new Date()) {
+  const dayOfWeek = referenceDate.getDay(); // 0 = Sun
+  const monday = new Date(referenceDate);
+  monday.setDate(referenceDate.getDate() - ((dayOfWeek + 6) % 7)); // shift back to Monday
 
   let dates = [];
   for (let i = 0; i < 7; i++) {
@@ -55,6 +59,10 @@ function loadFromStorage() {
 function renderHabits() {
   const habitContainer = document.querySelector("#day-habits");
   const today = getToday();
+
+  // If container doesn't exist (not on home view) just exit quietly
+  if (!habitContainer) return;
+
   habitContainer.innerHTML = "";
 
   if (habitsArray.length === 0) {
@@ -76,7 +84,10 @@ function renderHabits() {
     const checkMark = document.createElement("span");
     checkMark.innerText = isCompletedToday ? "✅" : "⬜";
     checkMark.style.cursor = "pointer";
-    checkMark.addEventListener("click", () => toggleHabit(habit.id, today));
+    checkMark.addEventListener("click", () => {
+      toggleHabit(habit.id, today);
+      renderHabits(); // re-render home view
+    });
 
     const habitName = document.createElement("span");
     habitName.textContent = habit.name;
@@ -85,7 +96,12 @@ function renderHabits() {
     const deleteBtn = document.createElement("button");
     deleteBtn.textContent = "Delete";
     deleteBtn.classList.add("delete-habit-btn");
-    deleteBtn.addEventListener("click", () => moveToTrash(habit.id));
+    deleteBtn.addEventListener("click", () => {
+      if (confirm(`Move "${habit.name}" to Trash?`)) {
+        moveToTrash(habit.id);
+        renderHabits();
+      }
+    });
 
     habitDiv.append(checkMark, habitName, deleteBtn);
     habitContainer.append(habitDiv);
@@ -94,54 +110,80 @@ function renderHabits() {
 
 // ====== RENDER WEEK ======
 function renderWeekView() {
-  const weekDates = getWeekDates();
-  mainContent.innerHTML = `<h2>Week View</h2>`;
+  // use currentDate as the reference so navigation works
+  const weekDates = getWeekDates(currentDate);
+
+  mainContent.innerHTML = `
+    <div class="week-header">
+      <button id="prev-week">⬅️</button>
+      <h2>Week of ${weekDates[0]} - ${weekDates[6]}</h2>
+      <button id="next-week">➡️</button>
+    </div>
+    <div class="week-grid"></div>
+  `;
 
   if (habitsArray.length === 0) {
     mainContent.innerHTML += `<p class="no-habits">No habits to display.</p>`;
     return;
   }
 
-  const table = document.createElement("table");
-  table.classList.add("week-table");
+  const grid = mainContent.querySelector(".week-grid");
 
-  const thead = document.createElement("thead");
+  // For each day of the week, create a column
+  weekDates.forEach(date => {
+    const dayCol = document.createElement("div");
+    dayCol.classList.add("week-day-column");
 
-  // ---- WEEKDAY NAMES ROW ----
-  const weekdayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-  const nameRow = document.createElement("tr");
-  nameRow.innerHTML = `<th></th>` + weekdayNames.map(n => `<th>${n}</th>`).join("");
-  thead.append(nameRow);
+    const header = document.createElement("div");
+    header.classList.add("week-day-header");
+    header.innerHTML = `<strong>${new Date(date).toLocaleDateString("default", { weekday: "short" })}</strong><br>${date.slice(8)}`;
+    dayCol.append(header);
 
-  // ---- DATES ROW ----
-  const headRow = document.createElement("tr");
-  headRow.innerHTML = `<th>Habit</th>` + weekDates.map(d => `<th>${d.slice(5)}</th>`).join("");
-  thead.append(headRow);
+    // add each habit row for that day
+    habitsArray.forEach(habit => {
+      const habitDiv = document.createElement("div");
+      habitDiv.classList.add("week-habit");
 
-  table.append(thead);
-
-  const tbody = document.createElement("tbody");
-  habitsArray.forEach(habit => {
-    const row = document.createElement("tr");
-    let cells = `<td>${habit.name}</td>`;
-    weekDates.forEach(date => {
       const done = habit.datesCompleted.includes(date);
-      cells += `<td class="week-cell" data-habit="${habit.id}" data-date="${date}">${done ? "✅" : "⬜"}</td>`;
+      habitDiv.innerHTML = `
+        <span class="habit-checkbox" style="cursor:pointer">${done ? "✅" : "⬜"}</span>
+        <span class="habit-name ${done ? "completed" : ""}">${habit.name}</span>
+        <button class="delete-btn">🗑️</button>
+      `;
+
+      // Toggle completion (checkbox)
+      habitDiv.querySelector(".habit-checkbox").addEventListener("click", () => {
+        toggleHabit(habit.id, date);
+        renderWeekView(); // re-render week view
+      });
+
+      // Move to trash (delete)
+      habitDiv.querySelector(".delete-btn").addEventListener("click", () => {
+        if (confirm(`Move "${habit.name}" to Trash?`)) {
+          moveToTrash(habit.id);
+          renderWeekView();
+        }
+      });
+
+      dayCol.append(habitDiv);
     });
-    row.innerHTML = cells;
-    tbody.append(row);
+
+    grid.append(dayCol);
   });
 
-  table.append(tbody);
-  mainContent.append(table);
+  // Navigation buttons
+  document.getElementById("prev-week").addEventListener("click", () => {
+    currentDate.setDate(currentDate.getDate() - 7);
+    currentYear = currentDate.getFullYear();
+    currentMonth = currentDate.getMonth();
+    renderWeekView();
+  });
 
-  document.querySelectorAll(".week-cell").forEach(cell => {
-    cell.addEventListener("click", () => {
-      const habitId = Number(cell.dataset.habit);
-      const date = cell.dataset.date;
-      toggleHabit(habitId, date);
-      renderWeekView();
-    });
+  document.getElementById("next-week").addEventListener("click", () => {
+    currentDate.setDate(currentDate.getDate() + 7);
+    currentYear = currentDate.getFullYear();
+    currentMonth = currentDate.getMonth();
+    renderWeekView();
   });
 }
 
@@ -155,7 +197,16 @@ function renderMonthView() {
       <h2>${new Date(currentYear, currentMonth).toLocaleString("default", { month: "long", year: "numeric" })}</h2>
       <button id="next-month">➡️</button>
     </div>
-    <div class="month-grid"></div>
+
+    <div class="month-grid">
+      <div class="day-name">Mon</div>
+      <div class="day-name">Tue</div>
+      <div class="day-name">Wed</div>
+      <div class="day-name">Thu</div>
+      <div class="day-name">Fri</div>
+      <div class="day-name">Sat</div>
+      <div class="day-name">Sun</div>
+    </div>
   `;
 
   if (habitsArray.length === 0) {
@@ -165,25 +216,16 @@ function renderMonthView() {
 
   const grid = mainContent.querySelector(".month-grid");
 
-  // Weekday headers (Mon - Sun)
-  const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-  weekdays.forEach(day => {
-    const headerCell = document.createElement("div");
-    headerCell.classList.add("month-cell", "month-header-cell");
-    headerCell.textContent = day;
-    grid.append(headerCell);
-  });
-
-  // Align with weekday (empty cells before 1st day)
+  // Align with weekday (make empty cells before 1st day)
   const firstDay = new Date(currentYear, currentMonth, 1).getDay(); // 0 = Sunday
-  const leadingEmptyCells = (firstDay + 6) % 7; // Monday-based offset
+  const leadingEmptyCells = (firstDay + 6) % 7; // make Monday first day of week
   for (let i = 0; i < leadingEmptyCells; i++) {
     const empty = document.createElement("div");
     empty.classList.add("month-cell", "empty");
     grid.append(empty);
   }
 
-  // Fill days with habits
+  // Fill real days
   monthDates.forEach(date => {
     const cell = document.createElement("div");
     cell.classList.add("month-cell");
@@ -191,6 +233,7 @@ function renderMonthView() {
     const dayNum = document.createElement("div");
     dayNum.classList.add("day-number");
     dayNum.textContent = date.slice(8);
+
     cell.append(dayNum);
 
     habitsArray.forEach(habit => {
@@ -231,7 +274,6 @@ function renderMonthView() {
     renderMonthView();
   });
 }
-
 
 // ====== RENDER TRASH ======
 function renderTrash() {
@@ -284,7 +326,7 @@ function toggleHabit(id, date) {
     habit.datesCompleted.push(date);
   }
   saveToStorage();
-  renderHabits();
+  // do NOT call renderHabits() here — caller decides which view to re-render
 }
 
 function addHabit(name) {
@@ -299,7 +341,7 @@ function moveToTrash(id) {
   habitsArray = habitsArray.filter(h => h.id !== id);
   trashArray.push(habit);
   saveToStorage();
-  renderHabits();
+  // do NOT render here; caller will re-render the proper view
 }
 
 function restoreHabit(id) {
