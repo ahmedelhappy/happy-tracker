@@ -4,23 +4,35 @@ const mainContent = document.getElementById("main-content");
 let counter = 0;
 let habitsArray = [];
 let trashArray = [];
-let currentDate = new Date();                  // <- added
-let currentMonth = currentDate.getMonth();     // 0-based
+let currentDate = new Date();
+let currentMonth = currentDate.getMonth();
 let currentYear = currentDate.getFullYear();
+let useRollingWeek = false; // NEW -> toggle for "last 7 days"
 
 // ====== UTILITIES ======
 function getToday() {
   const now = new Date();
-  now.setMinutes(now.getMinutes() - now.getTimezoneOffset()); 
+  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
   return now.toISOString().split("T")[0];
 }
 
-
-// now accepts a reference date (defaults to today)
 function getWeekDates(referenceDate = new Date()) {
-  const dayOfWeek = referenceDate.getDay(); // 0 = Sun
+  if (useRollingWeek) {
+    // Last 7 days INCLUDING today
+    const dates = [];
+    const today = new Date(); 
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      dates.push(d.toISOString().split("T")[0]);
+    }
+    return dates;
+  }
+
+  // Default: Monday to Sunday of current week
+  const dayOfWeek = referenceDate.getDay();
   const monday = new Date(referenceDate);
-  monday.setDate(referenceDate.getDate() - ((dayOfWeek + 6) % 7)); // shift back to Monday
+  monday.setDate(referenceDate.getDate() - ((dayOfWeek + 6) % 7));
 
   let dates = [];
   for (let i = 0; i < 7; i++) {
@@ -47,6 +59,9 @@ function saveToStorage() {
   localStorage.setItem("habits", JSON.stringify(habitsArray));
   localStorage.setItem("trash", JSON.stringify(trashArray));
   localStorage.setItem("counter", counter);
+  localStorage.setItem("activeSection", document.querySelector(".sidebar ul li.active")?.dataset.section || "home");
+  const inputField = document.getElementById("input-habit");
+  if (inputField) localStorage.setItem("pendingInput", inputField.value);
 }
 
 function loadFromStorage() {
@@ -59,8 +74,6 @@ function loadFromStorage() {
 function renderHabits() {
   const habitContainer = document.querySelector("#day-habits");
   const today = getToday();
-
-  // If container doesn't exist (not on home view) just exit quietly
   if (!habitContainer) return;
 
   habitContainer.innerHTML = "";
@@ -73,9 +86,17 @@ function renderHabits() {
     return;
   }
 
-  habitsArray.forEach((habit) => {
+  // Order habits: incomplete first
+  let orderedHabits = [...habitsArray].sort((a, b) => {
+    const aDone = a.datesCompleted.includes(today);
+    const bDone = b.datesCompleted.includes(today);
+    return aDone - bDone;
+  });
+
+  orderedHabits.forEach((habit) => {
     const habitDiv = document.createElement("div");
     habitDiv.classList.add("habit");
+    habitDiv.draggable = true;
     habitDiv.dataset.id = habit.id;
 
     const isCompletedToday = habit.datesCompleted.includes(today);
@@ -85,9 +106,13 @@ function renderHabits() {
     checkMark.innerText = isCompletedToday ? "✅" : "⬜";
     checkMark.style.cursor = "pointer";
     checkMark.addEventListener("click", () => {
-      toggleHabit(habit.id, today);
-      renderHabits(); // re-render home view
+      habitDiv.classList.add("habit-check-anim");
+      setTimeout(() => {
+        toggleHabit(habit.id, today);
+        renderHabits();
+      }, 250); // Wait until animation finishes
     });
+
 
     const habitName = document.createElement("span");
     habitName.textContent = habit.name;
@@ -106,86 +131,121 @@ function renderHabits() {
     habitDiv.append(checkMark, habitName, deleteBtn);
     habitContainer.append(habitDiv);
   });
+
+  enableDragAndDrop();
+}
+
+function enableDragAndDrop() {
+  const container = document.querySelector("#day-habits");
+  let dragged;
+
+  container.querySelectorAll(".habit").forEach((el) => {
+    el.addEventListener("dragstart", () => {
+      dragged = el;
+      setTimeout(() => el.classList.add("dragging"), 0);
+    });
+
+    el.addEventListener("dragend", () => {
+      el.classList.remove("dragging");
+      saveOrder();
+    });
+  });
+
+  container.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    const dragging = container.querySelector(".dragging");
+    const afterElement = getDragAfterElement(container, e.clientY);
+    if (afterElement == null) {
+      container.appendChild(dragging);
+    } else {
+      container.insertBefore(dragging, afterElement);
+    }
+  });
+}
+
+function getDragAfterElement(container, y) {
+  const draggableElements = [...container.querySelectorAll(".habit:not(.dragging)")];
+
+  return draggableElements.reduce(
+    (closest, child) => {
+      const box = child.getBoundingClientRect();
+      const offset = y - box.top - box.height / 2;
+      if (offset < 0 && offset > closest.offset) {
+        return { offset: offset, element: child };
+      } else {
+        return closest;
+      }
+    },
+    { offset: Number.NEGATIVE_INFINITY }
+  ).element;
+}
+
+function saveOrder() {
+  const ids = [...document.querySelectorAll("#day-habits .habit")].map((el) => Number(el.dataset.id));
+  habitsArray.sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id));
+  saveToStorage();
 }
 
 // ====== RENDER WEEK ======
 function renderWeekView() {
-  // use currentDate as the reference so navigation works
   const weekDates = getWeekDates(currentDate);
 
   mainContent.innerHTML = `
     <div class="week-header">
       <button id="prev-week">⬅️</button>
-      <h2>Week of ${weekDates[0]} - ${weekDates[6]}</h2>
+      <h2>${useRollingWeek ? "Last 7 Days" : `Week of ${weekDates[0]} - ${weekDates[6]}`}</h2>
       <button id="next-week">➡️</button>
+      <button id="toggle-week-mode">${useRollingWeek ? "Switch to Week View" : "Switch to Last 7 Days"}</button>
     </div>
-    <div class="week-grid"></div>
+    <table class="week-table">
+      <thead>
+        <tr>
+          <th>Day</th>
+          ${habitsArray.map(h => `<th>${h.name}</th>`).join("")}
+        </tr>
+      </thead>
+      <tbody>
+        ${weekDates.map(date => {
+          const dayName = new Date(date).toLocaleDateString("default", { weekday: "short" });
+          return `
+            <tr>
+              <td class="day-label">${dayName}<br>${date.slice(8)}</td>
+              ${habitsArray.map(habit => {
+                const done = habit.datesCompleted.includes(date);
+                return `<td class="habit-cell" data-id="${habit.id}" data-date="${date}">${done ? "✅" : "⬜"}</td>`;
+              }).join("")}
+            </tr>
+          `;
+        }).join("")}
+      </tbody>
+    </table>
   `;
 
-  if (habitsArray.length === 0) {
-    mainContent.innerHTML += `<p class="no-habits">No habits to display.</p>`;
-    return;
-  }
-
-  const grid = mainContent.querySelector(".week-grid");
-
-  // For each day of the week, create a column
-  weekDates.forEach(date => {
-    const dayCol = document.createElement("div");
-    dayCol.classList.add("week-day-column");
-
-    const header = document.createElement("div");
-    header.classList.add("week-day-header");
-    header.innerHTML = `<strong>${new Date(date).toLocaleDateString("default", { weekday: "short" })}</strong><br>${date.slice(8)}`;
-    dayCol.append(header);
-
-    // add each habit row for that day
-    habitsArray.forEach(habit => {
-      const habitDiv = document.createElement("div");
-      habitDiv.classList.add("week-habit");
-
-      const done = habit.datesCompleted.includes(date);
-      habitDiv.innerHTML = `
-        <span class="habit-checkbox" style="cursor:pointer">${done ? "✅" : "⬜"}</span>
-        <span class="habit-name ${done ? "completed" : ""}">${habit.name}</span>
-        <button class="delete-btn">🗑️</button>
-      `;
-
-      // Toggle completion (checkbox)
-      habitDiv.querySelector(".habit-checkbox").addEventListener("click", () => {
-        toggleHabit(habit.id, date);
-        renderWeekView(); // re-render week view
-      });
-
-      // Move to trash (delete)
-      habitDiv.querySelector(".delete-btn").addEventListener("click", () => {
-        if (confirm(`Move "${habit.name}" to Trash?`)) {
-          moveToTrash(habit.id);
-          renderWeekView();
-        }
-      });
-
-      dayCol.append(habitDiv);
+  document.querySelectorAll(".habit-cell").forEach(cell => {
+    cell.addEventListener("click", () => {
+      const id = Number(cell.dataset.id);
+      const date = cell.dataset.date;
+      toggleHabit(id, date);
+      renderWeekView();
     });
-
-    grid.append(dayCol);
   });
 
-  // Navigation buttons
   document.getElementById("prev-week").addEventListener("click", () => {
     currentDate.setDate(currentDate.getDate() - 7);
-    currentYear = currentDate.getFullYear();
-    currentMonth = currentDate.getMonth();
     renderWeekView();
   });
 
   document.getElementById("next-week").addEventListener("click", () => {
     currentDate.setDate(currentDate.getDate() + 7);
-    currentYear = currentDate.getFullYear();
-    currentMonth = currentDate.getMonth();
+    renderWeekView();
+  });
+
+  document.getElementById("toggle-week-mode").addEventListener("click", () => {
+    useRollingWeek = !useRollingWeek;
     renderWeekView();
   });
 }
+
 
 // ====== RENDER MONTH ======
 function renderMonthView() {
@@ -215,17 +275,14 @@ function renderMonthView() {
   }
 
   const grid = mainContent.querySelector(".month-grid");
-
-  // Align with weekday (make empty cells before 1st day)
-  const firstDay = new Date(currentYear, currentMonth, 1).getDay(); // 0 = Sunday
-  const leadingEmptyCells = (firstDay + 6) % 7; // make Monday first day of week
+  const firstDay = new Date(currentYear, currentMonth, 1).getDay();
+  const leadingEmptyCells = (firstDay + 6) % 7;
   for (let i = 0; i < leadingEmptyCells; i++) {
     const empty = document.createElement("div");
     empty.classList.add("month-cell", "empty");
     grid.append(empty);
   }
 
-  // Fill real days
   monthDates.forEach(date => {
     const cell = document.createElement("div");
     cell.classList.add("month-cell");
@@ -255,7 +312,6 @@ function renderMonthView() {
     grid.append(cell);
   });
 
-  // Navigation
   document.getElementById("prev-month").addEventListener("click", () => {
     currentMonth--;
     if (currentMonth < 0) {
@@ -326,7 +382,6 @@ function toggleHabit(id, date) {
     habit.datesCompleted.push(date);
   }
   saveToStorage();
-  // do NOT call renderHabits() here — caller decides which view to re-render
 }
 
 function addHabit(name) {
@@ -341,7 +396,6 @@ function moveToTrash(id) {
   habitsArray = habitsArray.filter(h => h.id !== id);
   trashArray.push(habit);
   saveToStorage();
-  // do NOT render here; caller will re-render the proper view
 }
 
 function restoreHabit(id) {
@@ -371,6 +425,9 @@ function loadSection(section) {
       <button id="add-habit-btn">+ Add Habit</button>
     `;
 
+    const savedInput = localStorage.getItem("pendingInput");
+    if (savedInput) document.getElementById("input-habit").value = savedInput;
+
     renderHabits();
 
     const addHabitBtn = document.getElementById("add-habit-btn");
@@ -382,9 +439,11 @@ function loadSection(section) {
         return alert("This habit already exists!");
       addHabit(value);
       input.value = "";
+      localStorage.removeItem("pendingInput");
       input.focus();
     });
 
+    document.getElementById("input-habit").addEventListener("input", () => saveToStorage());
     document.getElementById("input-habit").addEventListener("keyup", (e) => {
       if (e.key === "Enter") addHabitBtn.click();
     });
@@ -394,7 +453,20 @@ function loadSection(section) {
   if (section === "month") renderMonthView();
   if (section === "report") renderReport();
   if (section === "trash") renderTrash();
+
+  localStorage.setItem("activeSection", section);
 }
+
+// ====== INIT ======
+loadFromStorage();
+const lastSection = localStorage.getItem("activeSection") || "home";
+
+// Fix double-active issue
+navItems.forEach(i => i.classList.remove("active"));
+const activeNav = document.querySelector(`.sidebar ul li[data-section="${lastSection}"]`);
+if (activeNav) activeNav.classList.add("active");
+
+loadSection(lastSection);
 
 navItems.forEach((item) => {
   item.addEventListener("click", () => {
@@ -403,7 +475,3 @@ navItems.forEach((item) => {
     loadSection(item.dataset.section);
   });
 });
-
-// ====== INIT ======
-loadFromStorage();
-loadSection("home");
