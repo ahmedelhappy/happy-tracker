@@ -12,6 +12,7 @@ let habitsArray = [
 // Creates Div For each habit and appends it to habitContainer
 function renderHabits() {
   const habitContainer = document.querySelector("#day-habits");
+  const today = new Date().toISOString().split("T")[0]; // "YYYY-MM-DD"
 
   habitContainer.innerHTML = "";
 
@@ -26,21 +27,45 @@ function renderHabits() {
     let habitDiv = document.createElement("div");
     habitDiv.classList.add("habit");
     habitDiv.dataset.id = habit.id;
-    habitDiv.textContent = habit.name;
 
+    // Check if completed today
+    const isCompletedToday = habit.datesCompleted.includes(today);
+    if (isCompletedToday) habitDiv.classList.add("completed");
+
+    // [1] Check Mark
+    const checkMark = document.createElement("span");
+    checkMark.innerText = "✅ ";
+    checkMark.addEventListener("click", () => {
+      if (isCompletedToday) {
+        // Uncheck: remove today's date
+        habit.datesCompleted = habit.datesCompleted.filter(
+          (d) => d !== today
+        );
+      } else {
+        // Check: add today's date
+        habit.datesCompleted.push(today);
+      }
+      renderHabits(); // re-render UI
+    });
+
+    // [2] Habit Name
+    const habitName = document.createElement("span");
+    habitName.textContent = habit.name;
+
+    // [3] Delete Button
     const deleteHabitBtn = document.createElement("button");
     deleteHabitBtn.textContent = "Delete";
     deleteHabitBtn.classList.add("delete-habit-btn");
-    deleteHabitBtn.addEventListener("click", (e) => {
-      // habitsArray = habitsArray.filter(h => h.id !== Number(e.target.parentElement.dataset.id));
-      habitsArray = habitsArray.filter(h => h.id !== habit.id);
+    deleteHabitBtn.addEventListener("click", () => {
+      habitsArray = habitsArray.filter((h) => h.id !== habit.id);
       renderHabits();
-    })
+    });
 
-    habitDiv.append(deleteHabitBtn);
+    habitDiv.append(checkMark, habitName, deleteHabitBtn);
     habitContainer.append(habitDiv);
   });
 }
+
 
 
 // Load Tab When Clicking Li, and adds .active
@@ -92,6 +117,7 @@ function loadSection(section) {
     });
   }
 }
+
 
 loadSection("home");
 
