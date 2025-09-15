@@ -10,6 +10,7 @@ body {
   display: flex;
   height: 100vh;
   background: #f5f5f5;
+  color: #333;
 }
 
 a {
@@ -27,13 +28,20 @@ a {
   padding: 1rem;
 }
 
+.logo {
+  font-size: 1.4rem;
+  font-weight: bold;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
 .sidebar ul li {
   list-style: none;
-  margin: 1rem 0;
+  margin: 0.8rem 0;
   cursor: pointer;
   padding: 0.5rem 1rem;
   border-radius: 8px;
-  transition: background 0.2s;
+  transition: background 0.2s, color 0.2s;
 }
 
 .sidebar ul li:hover,
@@ -46,102 +54,255 @@ a {
 #main-content {
   flex: 1;
   padding: 2rem;
+  overflow-y: auto;
 }
 
 h2 {
   margin-bottom: 1rem;
 }
 
-.day-habits {
+/* ========== HABITS LIST ========== */
+#day-habits {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  margin-bottom: 1rem;
 }
 
 .habit {
-  background: white;
-  border: 1px solid #ddd;
-  padding: 0.5rem 1rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  background: white;
+  padding: 0.6rem 1rem;
   border-radius: 6px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
 
-.habit.completed span.habit-name {
+.habit.completed .habit-name {
   text-decoration: line-through;
-  opacity: 0.6;
+  color: #888;
 }
 
-button {
-  background: #4caf50;
-  color: white;
-  border: none;
-  padding: 0.3rem 0.6rem;
-  border-radius: 6px;
+.habit span:first-child {
+  font-size: 1.2rem;
   cursor: pointer;
 }
 
-button.delete-habit-btn {
-  background: #e74c3c;
+/* Delete Button */
+.delete-habit-btn {
+  background: transparent;
+  border: none;
+  color: #d9534f;
+  font-weight: bold;
+  cursor: pointer;
+  transition: color 0.2s;
 }
 
-button.restore-btn {
-  background: #3498db;
+.delete-habit-btn:hover {
+  color: #b52b27;
 }
 
-button:hover {
-  opacity: 0.85;
+/* Restore Button */
+.restore-btn {
+  background: #4caf50;
+  border: none;
+  color: white;
+  padding: 0.3rem 0.8rem;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.2s;
+  margin-right: 0.4rem;
 }
 
+.restore-btn:hover {
+  background: #3e8e41;
+}
+
+/* Input + Button */
 #input-habit {
-  padding: 0.4rem;
-  width: 60%;
-  border: 1px solid #ddd;
-  border-radius: 6px;
+  width: 70%;
+  padding: 0.5rem;
+  margin-top: 1rem;
+  margin-right: 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 5px;
 }
 
+#add-habit-btn {
+  padding: 0.5rem 0.8rem;
+  background: #4caf50;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+#add-habit-btn:hover {
+  background: #3e8e41;
+}
+
+/* ========== EMPTY STATES ========== */
 .no-habits {
   text-align: center;
   color: gray;
   font-style: italic;
-  margin-top: 1rem;
-}
-
-.stats {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  background: #fff;
   padding: 1rem;
-  border-radius: 6px;
-  border: 1px solid #ddd;
 }
 
-/* ====== WEEK VIEW ====== */
+/* ========== WEEK TABLE ========== */
 .week-table {
-  border-collapse: collapse;
   width: 100%;
+  border-collapse: collapse;
   background: white;
-  border: 1px solid #ddd;
-  border-radius: 6px;
+  border-radius: 8px;
   overflow: hidden;
+  margin-top: 1rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
 
-.week-table th,
-.week-table td {
+.week-table th, .week-table td {
   border: 1px solid #ddd;
-  padding: 0.4rem;
+  padding: 0.5rem;
   text-align: center;
 }
 
 .week-table th {
   background: #f0f0f0;
-  font-weight: bold;
 }
 
 .week-cell {
   cursor: pointer;
+  transition: background 0.2s;
+}
+
+.week-cell:hover {
+  background: #f9f9f9;
+}
+
+/* ========== Month TABLE ========== */
+.month-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-top: 1rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  font-size: 0.85rem;
+}
+
+.month-table th, .month-table td {
+  border: 1px solid #ddd;
+  padding: 0.3rem;
+  text-align: center;
+}
+
+.month-table th {
+  background: #f0f0f0;
+  font-weight: 600;
+}
+
+.month-cell {
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.month-cell:hover {
+  background: #f9f9f9;
+}
+
+.month-habit-block {
+  margin-bottom: 2rem;
+}
+
+.month-habit-block h3 {
+  margin-bottom: 0.5rem;
   font-size: 1.2rem;
+}
+
+.month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+
+.month-cell {
+  text-align: center;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  background: #f9f9f9;
+  transition: 0.2s ease;
+}
+
+.month-cell:hover {
+  background: #e0e0e0;
+}
+
+.month-cell.completed {
+  background: #b2f2bb;
+  font-weight: bold;
+}
+
+
+/* ========== REPORT SECTION ========== */
+.stats {
+  background: white;
+  padding: 1rem;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.stats p {
+  margin: 0.5rem 0;
+}
+
+
+.month-header {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.5rem;
+}
+
+.month-cell {
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 0.4rem;
+  min-height: 90px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  background: #fafafa;
+}
+
+.month-cell.empty {
+  background: transparent;
+  border: none;
+}
+
+.day-number {
+  font-weight: bold;
+  margin-bottom: 0.3rem;
+}
+
+.habit-entry {
+  font-size: 0.85rem;
+  cursor: pointer;
+  margin: 2px 0;
+}
+.habit-entry:hover {
+  background: #eee;
+  border-radius: 4px;
+  padding: 2px;
 }

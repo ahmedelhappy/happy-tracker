@@ -4,6 +4,8 @@ const mainContent = document.getElementById("main-content");
 let counter = 0;
 let habitsArray = [];
 let trashArray = [];
+let currentMonth = new Date().getMonth(); // 0-based
+let currentYear = new Date().getFullYear();
 
 // ====== UTILITIES ======
 function getToday() {
@@ -11,16 +13,26 @@ function getToday() {
 }
 
 function getWeekDates() {
-  // Returns array of 7 days starting from Monday of current week
   const today = new Date();
-  const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday...
+  const dayOfWeek = today.getDay();
   const monday = new Date(today);
-  monday.setDate(today.getDate() - ((dayOfWeek + 6) % 7)); // shift back to Monday
+  monday.setDate(today.getDate() - ((dayOfWeek + 6) % 7));
 
   let dates = [];
   for (let i = 0; i < 7; i++) {
     let d = new Date(monday);
     d.setDate(monday.getDate() + i);
+    dates.push(d.toISOString().split("T")[0]);
+  }
+  return dates;
+}
+
+function getMonthDates(year, month) {
+  const dates = [];
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
+
+  for (let d = new Date(firstDay); d <= lastDay; d.setDate(d.getDate() + 1)) {
     dates.push(d.toISOString().split("T")[0]);
   }
   return dates;
@@ -93,14 +105,21 @@ function renderWeekView() {
   const table = document.createElement("table");
   table.classList.add("week-table");
 
-  // Table header
   const thead = document.createElement("thead");
+
+  // ---- WEEKDAY NAMES ROW ----
+  const weekdayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const nameRow = document.createElement("tr");
+  nameRow.innerHTML = `<th></th>` + weekdayNames.map(n => `<th>${n}</th>`).join("");
+  thead.append(nameRow);
+
+  // ---- DATES ROW ----
   const headRow = document.createElement("tr");
   headRow.innerHTML = `<th>Habit</th>` + weekDates.map(d => `<th>${d.slice(5)}</th>`).join("");
   thead.append(headRow);
+
   table.append(thead);
 
-  // Table body
   const tbody = document.createElement("tbody");
   habitsArray.forEach(habit => {
     const row = document.createElement("tr");
@@ -116,16 +135,103 @@ function renderWeekView() {
   table.append(tbody);
   mainContent.append(table);
 
-  // Make cells clickable
   document.querySelectorAll(".week-cell").forEach(cell => {
     cell.addEventListener("click", () => {
       const habitId = Number(cell.dataset.habit);
       const date = cell.dataset.date;
       toggleHabit(habitId, date);
-      renderWeekView(); // re-render to update UI
+      renderWeekView();
     });
   });
 }
+
+// ====== RENDER MONTH ======
+function renderMonthView() {
+  const monthDates = getMonthDates(currentYear, currentMonth);
+
+  mainContent.innerHTML = `
+    <div class="month-header">
+      <button id="prev-month">⬅️</button>
+      <h2>${new Date(currentYear, currentMonth).toLocaleString("default", { month: "long", year: "numeric" })}</h2>
+      <button id="next-month">➡️</button>
+    </div>
+    <div class="month-grid"></div>
+  `;
+
+  if (habitsArray.length === 0) {
+    mainContent.innerHTML += `<p class="no-habits">No habits to display.</p>`;
+    return;
+  }
+
+  const grid = mainContent.querySelector(".month-grid");
+
+  // Weekday headers (Mon - Sun)
+  const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  weekdays.forEach(day => {
+    const headerCell = document.createElement("div");
+    headerCell.classList.add("month-cell", "month-header-cell");
+    headerCell.textContent = day;
+    grid.append(headerCell);
+  });
+
+  // Align with weekday (empty cells before 1st day)
+  const firstDay = new Date(currentYear, currentMonth, 1).getDay(); // 0 = Sunday
+  const leadingEmptyCells = (firstDay + 6) % 7; // Monday-based offset
+  for (let i = 0; i < leadingEmptyCells; i++) {
+    const empty = document.createElement("div");
+    empty.classList.add("month-cell", "empty");
+    grid.append(empty);
+  }
+
+  // Fill days with habits
+  monthDates.forEach(date => {
+    const cell = document.createElement("div");
+    cell.classList.add("month-cell");
+
+    const dayNum = document.createElement("div");
+    dayNum.classList.add("day-number");
+    dayNum.textContent = date.slice(8);
+    cell.append(dayNum);
+
+    habitsArray.forEach(habit => {
+      const habitDiv = document.createElement("div");
+      habitDiv.classList.add("habit-entry");
+
+      const done = habit.datesCompleted.includes(date);
+      habitDiv.innerHTML = `${done ? "✅" : "⬜"} ${habit.name}`;
+
+      habitDiv.addEventListener("click", (e) => {
+        e.stopPropagation();
+        toggleHabit(habit.id, date);
+        renderMonthView();
+      });
+
+      cell.append(habitDiv);
+    });
+
+    grid.append(cell);
+  });
+
+  // Navigation
+  document.getElementById("prev-month").addEventListener("click", () => {
+    currentMonth--;
+    if (currentMonth < 0) {
+      currentMonth = 11;
+      currentYear--;
+    }
+    renderMonthView();
+  });
+
+  document.getElementById("next-month").addEventListener("click", () => {
+    currentMonth++;
+    if (currentMonth > 11) {
+      currentMonth = 0;
+      currentYear++;
+    }
+    renderMonthView();
+  });
+}
+
 
 // ====== RENDER TRASH ======
 function renderTrash() {
@@ -238,14 +344,12 @@ function loadSection(section) {
     });
 
     document.getElementById("input-habit").addEventListener("keyup", (e) => {
-      if(e.key === "Enter") 
-        addHabitBtn.click();
-    })
-    
+      if (e.key === "Enter") addHabitBtn.click();
+    });
   }
 
   if (section === "week") renderWeekView();
-  if (section === "month") mainContent.innerHTML = `<h2>Month View</h2><p>Coming soon!</p>`;
+  if (section === "month") renderMonthView();
   if (section === "report") renderReport();
   if (section === "trash") renderTrash();
 }
