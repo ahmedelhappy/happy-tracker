@@ -1,5 +1,6 @@
 const navItems = document.querySelectorAll(".sidebar ul li");
 const mainContent = document.getElementById("main-content");
+const nightModeBtn = document.createElement('button');
 
 let counter = 0;
 let habitsArray = [];
@@ -7,7 +8,28 @@ let trashArray = [];
 let currentDate = new Date();
 let currentMonth = currentDate.getMonth();
 let currentYear = currentDate.getFullYear();
-let useRollingWeek = false; // NEW -> toggle for "last 7 days"
+let useRollingWeek = false;
+
+// ====== NIGHT MODE ======
+nightModeBtn.id = 'toggle-night-mode';
+nightModeBtn.textContent = '🌙';
+nightModeBtn.classList.add('night-mode-btn');
+document.querySelector('.sidebar').appendChild(nightModeBtn);
+
+function toggleNightMode() {
+  document.body.classList.toggle('dark-mode');
+  const isDark = document.body.classList.contains('dark-mode');
+  localStorage.setItem('darkMode', isDark);
+  nightModeBtn.textContent = isDark ? '☀️' : '🌙';
+}
+
+nightModeBtn.addEventListener('click', toggleNightMode);
+
+// Restore previous mode
+if (localStorage.getItem('darkMode') === 'true') {
+  document.body.classList.add('dark-mode');
+  nightModeBtn.textContent = '☀️';
+}
 
 // ====== UTILITIES ======
 function getToday() {
@@ -18,26 +40,26 @@ function getToday() {
 
 function getWeekDates(referenceDate = new Date()) {
   if (useRollingWeek) {
-    // Last 7 days INCLUDING today
     const dates = [];
-    const today = new Date(); 
+    const todayISO = getToday();
+    const todayDate = new Date(todayISO);
     for (let i = 6; i >= 0; i--) {
-      const d = new Date(today);
-      d.setDate(today.getDate() - i);
+      const d = new Date(todayDate);
+      d.setDate(todayDate.getDate() - i);
+      d.setMinutes(todayDate.getMinutes() - todayDate.getTimezoneOffset());
       dates.push(d.toISOString().split("T")[0]);
     }
     return dates;
   }
 
-  // Default: Monday to Sunday of current week
   const dayOfWeek = referenceDate.getDay();
   const monday = new Date(referenceDate);
   monday.setDate(referenceDate.getDate() - ((dayOfWeek + 6) % 7));
-
   let dates = [];
   for (let i = 0; i < 7; i++) {
     let d = new Date(monday);
     d.setDate(monday.getDate() + i);
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
     dates.push(d.toISOString().split("T")[0]);
   }
   return dates;
@@ -47,7 +69,6 @@ function getMonthDates(year, month) {
   const dates = [];
   const firstDay = new Date(year, month, 1);
   const lastDay = new Date(year, month + 1, 0);
-
   for (let d = new Date(firstDay); d <= lastDay; d.setDate(d.getDate() + 1)) {
     dates.push(d.toISOString().split("T")[0]);
   }
@@ -135,33 +156,42 @@ function renderHabits() {
   enableDragAndDrop();
 }
 
+// ====== DRAG & DROP ======
 function enableDragAndDrop() {
   const container = document.querySelector("#day-habits");
   let dragged;
+  let dropLine = document.createElement("div");
+  dropLine.classList.add("habit-drop-line");
+  dropLine.style.display = "none";
+  container.appendChild(dropLine);
 
   container.querySelectorAll(".habit").forEach((el) => {
     el.addEventListener("dragstart", () => {
       dragged = el;
       setTimeout(() => el.classList.add("dragging"), 0);
+      dropLine.style.display = "block";
     });
 
     el.addEventListener("dragend", () => {
       el.classList.remove("dragging");
+      dropLine.style.display = "none";
       saveOrder();
     });
   });
 
   container.addEventListener("dragover", (e) => {
     e.preventDefault();
-    const dragging = container.querySelector(".dragging");
     const afterElement = getDragAfterElement(container, e.clientY);
     if (afterElement == null) {
-      container.appendChild(dragging);
+      container.appendChild(dragged);
+      dropLine.style.top = container.lastElementChild.getBoundingClientRect().bottom - container.getBoundingClientRect().top + "px";
     } else {
-      container.insertBefore(dragging, afterElement);
+      container.insertBefore(dragged, afterElement);
+      dropLine.style.top = afterElement.getBoundingClientRect().top - container.getBoundingClientRect().top + "px";
     }
   });
 }
+
 
 function getDragAfterElement(container, y) {
   const draggableElements = [...container.querySelectorAll(".habit:not(.dragging)")];
